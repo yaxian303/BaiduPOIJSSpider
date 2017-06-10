@@ -1,0 +1,167 @@
+﻿<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+        body, html,#allmap {width: 100%;height: 100%; margin:0;font-family:"微软雅黑";}
+        #l-map{height:300px;width:100%;}
+        #r-result{width:100%; font-size: 14px; line-height: 20px;}
+    </style>
+    <script type="text/javascript" src="http://api.map.baidu.com/api?v=2.0&ak=你自己的Key"></script>
+    <title>POI爬取工具</title>
+</head>
+<body>
+<div id="l-map"></div>
+<div id="r-result"></div>
+</body>
+<script type="text/javascript">
+  //喜欢的话请给星星
+
+
+    // 百度地图API功能 全局变量
+
+    var map = new BMap.Map("l-map");
+
+    map.centerAndZoom(new BMap.Point(114.06444, 22.548488), 11);
+   var finalResults=[];
+
+
+    //把深圳经纬度划分为小矩形 进行遍历，并进行循环搜索，得到所有返回结果
+
+    window.onload=function() {
+
+
+        //初始化数据库
+        initDatabase();
+
+
+
+//------------根据矩形区域边界搜索范围内POI  每个里面最多可以有760个数据分块查询 得到所有信息
+
+
+
+      for (let j = 113.728919; j < 114.528919; j = j + 0.1) {
+            for (let i = 22.461675; i < 22.766513; i = i + 0.1) {
+                var pStart = new BMap.Point(j, i);
+                var pEnd = new BMap.Point(j + 0.1, i + 0.1);
+                var bs = new BMap.Bounds(pStart, pEnd);
+
+                console.log(j+","+i);
+                SearchPOI(bs);
+            
+
+            }
+        }
+
+
+
+    }
+
+
+
+
+
+    function SearchPOI(bs){
+        var rA=[];
+        var resultArray=[];
+        var options = {
+       pageCapacity : 50 //设置每页显示50个数据
+        };
+
+
+
+        var  local  = new BMap.LocalSearch(map, options);
+        local.searchInBounds("停车场",bs);//范围搜索 关键字
+        //搜索结束后的回调函数
+        local.setSearchCompleteCallback(
+                function(results){
+
+                // 判断状态是否正确
+                if (local.getStatus() == BMAP_STATUS_SUCCESS){
+
+                    var totalResults = results.getNumPois();
+                    var totalPages = results.getNumPages();
+                    var currPage = results.getPageIndex();// 获取当前是第几页数据
+                    //alert("totalResults:" + totalResults);
+                    for (let i = 0; i < results.getCurrentNumPois(); i++) {
+                    resultArray[50 * currPage + i] = results.getPoi(i);//在当前页面下获取页面中的内容
+                    }
+
+                    if (results.getPageIndex() < results.getNumPages() - 1) {
+                        local.gotoPage(results.getPageIndex() + 1); // 遍历到最后一页之后不再进行下一页搜索，此时，已经获取到全部的搜索结果，
+                    } else {// 已经到达最后一页结果
+
+                       console.log("全部结果有：" + resultArray.length + "------原本搜索结果有：" + results.getNumPois());
+                        //在新页面中打开 s
+                        //    console.log(s);
+
+                        //存储数据
+                          var db = getCurrentDb();
+                          for(let k=0;k<resultArray.length;k++){
+                        //使用闭包遍历数组  防止遍历失败
+                                (function(arg){
+                                    let txtName= resultArray[k].title;
+                                    let txtPhone= resultArray[k].phoneNumber;
+                                   let txtAddress= resultArray[k].address;
+
+                                    let txtLon= resultArray[k].point.lng;
+                                    let txtLat= resultArray[k].point.lat;
+
+
+                                    //执行sql脚本，插入数据
+                                    db.transaction(function (trans) {
+                                        trans.executeSql("insert into PZ(title,phone,address,lon,lat) values(?,?,?,?,?) ", [txtName,txtPhone,txtAddress, txtLon, txtLat], function (ts, data) {
+                                        }, function (ts, message) {
+                                            alert(message);
+                                        });
+                                    });
+
+
+
+                                })(k);//
+
+                             }
+
+                }
+
+                }
+
+
+
+
+        });
+
+        return ;
+
+    }
+
+    //--------------数据库相关函数
+    function initDatabase() {
+        var db = getCurrentDb();//初始化数据库
+        if(!db) {alert("您的浏览器不支持HTML5本地数据库");return;}
+        db.transaction(function (trans) {//启动一个事务，并设置回调函数
+            //执行创建表的Sql脚本
+            trans.executeSql("create table if not exists PZ(title text null,phone text null,address text null,lon double null,lat double null)", [], function (trans, result) {
+            }, function (trans, message) {//消息的回调函数alert(message);});
+            }, function (trans, result) {
+            }, function (trans, message) {
+            });
+        })
+    }
+
+    function getCurrentDb() {
+        //打开数据库，或者直接连接数据库参数：数据库名称，版本，概述，大小
+        //如果数据库不存在那么创建之
+        var db = openDatabase("myDb", "1.0", "it's to save demo data!", 1024 * 1024); ;
+        return db;
+    }
+
+    //--------------
+
+
+
+
+</script>
+
+</html>
